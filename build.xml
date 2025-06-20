@@ -239,8 +239,7 @@
         </RunJunit>
     </target>
 
-    <target name="runtest" depends="testcompile"
-            description="Runs the test you specify on the command line with -Dtest=">
+    <target name="runtest" description="Runs the test you specify on the command line with -Dtest=">
         <!-- Check for -Dtest command line argument -->
         <fail unless="test" message="You must run this target with -Dtest=TestName"/>
 
