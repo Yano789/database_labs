@@ -217,7 +217,7 @@
         </Compile>
     </target>
 
-    <target name="test" description="Run all unit tests">
+    <target name="test" depends="compile" description="Run all unit tests">
         <RunJunit>
             <batchtest>
                 <fileset dir="${build.test}">
@@ -239,7 +239,7 @@
         </RunJunit>
     </target>
 
-    <target name="runtest" description="Runs the test you specify on the command line with -Dtest=">
+    <target name="runtest" depends="compile" description="Runs the test you specify on the command line with -Dtest=">
         <!-- Check for -Dtest command line argument -->
         <fail unless="test" message="You must run this target with -Dtest=TestName"/>
 
