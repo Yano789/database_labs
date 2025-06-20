@@ -217,7 +217,7 @@
         </Compile>
     </target>
 
-    <target name="test" depends="testcompile" description="Run all unit tests">
+    <target name="test" description="Run all unit tests">
         <RunJunit>
             <batchtest>
                 <fileset dir="${build.test}">
