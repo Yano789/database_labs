@@ -79,19 +79,19 @@ public class BufferPool {
      */
     public  Page getPage(TransactionId tid, PageId pid, Permissions perm)
         throws TransactionAbortedException, DbException {
-        // some code goes here
+        
         if (pageCache.containsKey(pid)) {
             return pageCache.get(pid);
         }
 
         if (pageCache.size() >= numPages) {
-            throw new DbException("Buffer pool full");
+            evictPage();
         }
         
         DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
         Page page = dbFile.readPage(pid);
-
         pageCache.put(pid, page);
+        
         return page;
     }
 
@@ -184,9 +184,9 @@ public class BufferPool {
      *     break simpledb if running in NO STEAL mode.
      */
     public synchronized void flushAllPages() throws IOException {
-        // some code goes here
-        // not necessary for lab1
-
+        for (PageId pid : pageCache.keySet()) {
+            flushPage(pid);
+        }
     }
 
     /** Remove the specific page id from the buffer pool.
@@ -198,8 +198,7 @@ public class BufferPool {
         are removed from the cache so they can be reused safely
     */
     public synchronized void discardPage(PageId pid) {
-        // some code goes here
-        // not necessary for lab1
+        pageCache.remove(pid);
     }
 
     /**
@@ -207,8 +206,14 @@ public class BufferPool {
      * @param pid an ID indicating the page to flush
      */
     private synchronized  void flushPage(PageId pid) throws IOException {
-        // some code goes here
-        // not necessary for lab1
+        Page page = pageCache.get(pid);
+        if (page != null && page.isDirty() != null) {
+            // Write to disk
+            Database.getCatalog().getDatabaseFile(pid.getTableId())
+                   .writePage(page);
+            // Mark page as not dirty
+            page.markDirty(false, null);
+        }
     }
 
     /** Write all pages of the specified transaction to disk.
@@ -223,8 +228,34 @@ public class BufferPool {
      * Flushes the page to disk to ensure dirty pages are updated on disk.
      */
     private synchronized  void evictPage() throws DbException {
-        // some code goes here
-        // not necessary for lab1
+        // Check for dirty pages
+        boolean allDirty = true;
+        for (Page page : pageCache.values()) {
+            if (page.isDirty() == null) {
+                allDirty = false;
+                break; 
+            }
+        }
+        
+        if (allDirty) {
+            throw new DbException("All pages are dirty!");
+        }
+
+        // Find the least recently used clean page
+        PageId victimId = null;
+        for (Map.Entry<PageId, Page> entry : pageCache.entrySet()) {
+            if (entry.getValue().isDirty() == null) {
+                victimId = entry.getKey();
+                break;
+            }
+        }
+
+        // Remove the victim page
+        if (victimId != null) {
+            pageCache.remove(victimId);
+        } else {
+            throw new DbException("No clean pages to evict");
+        }
     }
 
 }
