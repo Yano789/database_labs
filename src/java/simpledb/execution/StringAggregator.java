@@ -91,24 +91,22 @@ public class StringAggregator implements Aggregator {
             });
         }
 
-        List<Tuple> tuples = getTuplesForAggregatedResults(td);
-        return new TupleIterator(td, tuples);
-    }
-
-    private List<Tuple> getTuplesForAggregatedResults(TupleDesc td) {
         List<Tuple> tuples = new ArrayList<>();
         for (Map.Entry<Field, Integer> entry: this.aggregateResults.entrySet()) {
-        Tuple tup = new Tuple(td);
-        int aggregateValue = entry.getValue();
-        if (hasGroup) {
-            tup.setField(0, entry.getKey());
-            tup.setField(1, new IntField(aggregateValue));
-        } else {
-            tup.setField(0, new IntField(aggregateValue));
-        }
-        tuples.add(tup);
-        }
-        return tuples;
-  }
+            Tuple tup = new Tuple(td);
+            int aggregateVal = entry.getValue();
 
+            if (hasGroup) {
+                tup.setField(0, entry.getKey());
+                tup.setField(1, new IntField(aggregateVal));
+            }
+            else {
+                tup.setField(0, new IntField(aggregateVal));
+            }
+
+            tuples.add(tup);
+        }
+
+        return new TupleIterator(td, tuples);
+    }
 }
