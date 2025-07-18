@@ -120,7 +120,6 @@ public class HeapFile implements DbFile {
                     Permissions.READ_WRITE);
             if (page.getNumEmptySlots() > 0) {
                 page.insertTuple(t);
-                page.markDirty(true, tid);
                 results.add(page);
                 break;
             }
@@ -131,7 +130,6 @@ public class HeapFile implements DbFile {
             page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableId, numPages),
                     Permissions.READ_WRITE);
             page.insertTuple(t);
-            page.markDirty(true, tid);
             results.add(page);
         }
         return results;
@@ -141,18 +139,9 @@ public class HeapFile implements DbFile {
     public ArrayList<Page> deleteTuple(TransactionId tid, Tuple t)
             throws DbException, TransactionAbortedException {
         ArrayList<Page> results = new ArrayList<>();
-        for (int i = 0; i < numPages(); i++) {
-            HeapPageId pid = new HeapPageId(tableId, i);
-            HeapPage page =
-                    (HeapPage) Database.getBufferPool().getPage(tid, pid, Permissions.READ_WRITE);
-            try {
-                page.deleteTuple(t);
-                page.markDirty(true, tid);
-                break;
-            } catch (DbException e) {
-                // Tuple not in page;
-            }
-        }
+        HeapPage heapPage = (HeapPage) Database.getBufferPool().getPage(tid,
+                t.getRecordId().getPageId(), Permissions.READ_WRITE);
+        heapPage.deleteTuple(t);
         return results;
     }
 

@@ -100,4 +100,23 @@ public class Tuple implements Serializable {
     public void resetTupleDesc(TupleDesc td) {
         this.td = td;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!(obj instanceof Tuple))
+            return false;
+        Tuple other = (Tuple) obj;
+        if (!td.equals(other.getTupleDesc()))
+            return false;
+        Iterator<Field> oIterator = other.fields();
+        int i = 0;
+        while (oIterator.hasNext()) {
+            Field ofield = oIterator.next();
+            if (!this.fields[i++].equals(ofield))
+                return false;
+        }
+        if (i != fields.length)
+            return false;
+        return true;
+    }
 }

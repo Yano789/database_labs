@@ -1,5 +1,6 @@
 package simpledb.storage;
 
+import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.Permissions;
 import simpledb.common.DbException;
@@ -10,6 +11,8 @@ import simpledb.transaction.TransactionId;
 import java.io.*;
 
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -147,8 +150,12 @@ public class BufferPool {
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+        DbFile dbFile = Database.getCatalog().getDatabaseFile(tableId);
+        List<Page> pages = dbFile.insertTuple(tid, t);
+        for (Page page : pages) {
+            page.markDirty(true, tid);
+            pageCache.put(page.getId(), page);
+        }
     }
 
     /**
@@ -165,8 +172,12 @@ public class BufferPool {
      */
     public void deleteTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
-        // some code goes here
-        // not necessary for lab1
+        List<Page> pages = Database.getCatalog()
+                .getDatabaseFile(t.getRecordId().getPageId().getTableId()).deleteTuple(tid, t);
+        for (Page page : pages) {
+            page.markDirty(true, tid);
+            pageCache.put(page.getId(), page);
+        }
     }
 
     /**
