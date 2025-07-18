@@ -1,7 +1,6 @@
 package simpledb.execution;
 
 import java.io.IOException;
-import simpledb.common.Catalog;
 import simpledb.common.Database;
 import simpledb.common.DbException;
 import simpledb.common.Type;
@@ -47,9 +46,11 @@ public class Insert extends Operator {
 
     public void open() throws DbException, TransactionAbortedException {
         child.open();
+        super.open();
     }
 
     public void close() {
+        super.close();
         child.close();
     }
 
@@ -79,9 +80,12 @@ public class Insert extends Operator {
                 e.printStackTrace();
             }
         }
-        Tuple resultTuple = new Tuple(td);
-        resultTuple.setField(0, new IntField(insertedCount == 0 ? null : insertedCount));
-        return resultTuple;
+        if (insertedCount > 0) {
+            Tuple resultTuple = new Tuple(td);
+            resultTuple.setField(0, new IntField(insertedCount));
+            return resultTuple;
+        }
+        return null;
     }
 
     @Override
