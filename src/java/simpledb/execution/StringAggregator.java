@@ -61,7 +61,6 @@ public class StringAggregator implements Aggregator {
             fieldToGroup = tup.getField(this.gbfield);
         }
         
-        String newValue = ((StringField) tup.getField(this.afield)).getValue();
         int oldValue = this.aggregateResults.getOrDefault(fieldToGroup, 0);
         this.aggregateResults.put(fieldToGroup, oldValue + 1);
     }
