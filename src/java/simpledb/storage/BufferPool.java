@@ -114,7 +114,8 @@ public class BufferPool {
      */
     public void transactionComplete(TransactionId tid) {
         // some code goes here
-        // not necessary for lab1|lab2
+        // not necessary for lab1|
+        transactionComplete(tid, true);
     }
 
     /** Return true if the specified transaction has a lock on the specified page */
@@ -133,6 +134,27 @@ public class BufferPool {
     public void transactionComplete(TransactionId tid, boolean commit) {
         // some code goes here
         // not necessary for lab1|lab2
+        if (commit) {
+            for (Map.Entry<PageId, Page> entry : pageCache.entrySet()) {
+                if (entry.getValue().isDirty() != null && entry.getValue().isDirty().equals(tid)) {
+                    try {
+                        flushPage(entry.getKey());
+                    }
+                    catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        }
+        else {
+            Iterator<Map.Entry<PageId, Page>> iterator = pageCache.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<PageId, Page> entry = iterator.next();
+                if (entry.getValue() != null && entry.getValue().isDirty().equals(tid)) {
+                    iterator.remove();
+                }
+            }
+        }
     }
 
     /**
@@ -230,19 +252,34 @@ public class BufferPool {
      */
     private synchronized void evictPage() throws DbException {
         // Check for dirty pages
-        boolean allDirty = true;
-        for (Page page : pageCache.values()) {
-            if (page.isDirty() == null) {
-                allDirty = false;
-                break;
-            }
-        }
+        // boolean allDirty = true;
+        // for (Page page : pageCache.values()) {
+        //     if (page.isDirty() == null) {
+        //         allDirty = false;
+        //         break;
+        //     }
+        // }
 
-        if (allDirty) {
-            throw new DbException("All pages are dirty!");
-        }
+        // if (allDirty) {
+        //     throw new DbException("All pages are dirty!");
+        // }
 
-        // Find the least recently used clean page
+        // // Find the least recently used clean page
+        // PageId victimId = null;
+        // for (Map.Entry<PageId, Page> entry : pageCache.entrySet()) {
+        //     if (entry.getValue().isDirty() == null) {
+        //         victimId = entry.getKey();
+        //         break;
+        //     }
+        // }
+
+        // // Remove the victim page
+        // if (victimId != null) {
+        //     pageCache.remove(victimId);
+        // } else {
+        //     throw new DbException("No clean pages to evict");
+        // }
+
         PageId victimId = null;
         for (Map.Entry<PageId, Page> entry : pageCache.entrySet()) {
             if (entry.getValue().isDirty() == null) {
@@ -251,11 +288,10 @@ public class BufferPool {
             }
         }
 
-        // Remove the victim page
-        if (victimId != null) {
-            pageCache.remove(victimId);
-        } else {
-            throw new DbException("No clean pages to evict");
+        if (victimId == null) {
+            throw new DbException("Cannot evict page: all pages in buffer pool are dirty (NO STEAL policy)");
         }
+
+        pageCache.remove(victimId);
     }
 }
