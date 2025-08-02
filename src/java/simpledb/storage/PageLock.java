@@ -34,7 +34,7 @@ public class PageLock {
         this.pageLockState = PageLockState.NONE;
         this.waiters = new LinkedList<>();
         this.lastWaitingTransactionId = null;
-        this.reentrantLock = new ReentrantLock();
+        this.reentrantLock = new ReentrantLock(true);
         this.condition = reentrantLock.newCondition();
         this.nextTransactionId = null;
     }

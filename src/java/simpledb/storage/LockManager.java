@@ -63,7 +63,8 @@ public class LockManager {
     // }
     // }
     // }
-    // yufeng: ex5 requires actual blocking
+    // yufeng: refactored into acquireShared and acquireExclusive as the methods
+    // would get very long.
 
     public void acquireShared(TransactionId transactionId, PageId pageId) throws TransactionAbortedException {
         try {
