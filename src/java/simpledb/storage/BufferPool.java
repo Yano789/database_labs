@@ -149,7 +149,6 @@ public class BufferPool {
                 if (page.isDirty() != null && page.isDirty().equals(tid)) {
                     try {
                         flushPage(entry.getKey());
-                        page.markDirty(false, null);
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
