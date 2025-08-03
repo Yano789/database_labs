@@ -11,9 +11,12 @@ import java.io.*;
 import java.util.*;
 
 /**
- * HeapFile is an implementation of a DbFile that stores a collection of tuples in no particular
- * order. Tuples are stored on pages, each of which is a fixed size, and the file is simply a
- * collection of those pages. HeapFile works closely with HeapPage. The format of HeapPages is
+ * HeapFile is an implementation of a DbFile that stores a collection of tuples
+ * in no particular
+ * order. Tuples are stored on pages, each of which is a fixed size, and the
+ * file is simply a
+ * collection of those pages. HeapFile works closely with HeapPage. The format
+ * of HeapPages is
  * described in the HeapPage constructor.
  * 
  * @see HeapPage#HeapPage
@@ -24,6 +27,7 @@ public class HeapFile implements DbFile {
     private final File file;
     private final TupleDesc td;
     private final int tableId;
+    private final Object writePageLock = new Object();
 
     /**
      * Constructs a heap file backed by the specified file.
@@ -48,10 +52,14 @@ public class HeapFile implements DbFile {
     }
 
     /**
-     * Returns an ID uniquely identifying this HeapFile. Implementation note: you will need to
-     * generate this tableid somewhere to ensure that each HeapFile has a "unique id," and that you
-     * always return the same value for a particular HeapFile. We suggest hashing the absolute file
-     * name of the file underlying the heapfile, i.e. f.getAbsoluteFile().hashCode().
+     * Returns an ID uniquely identifying this HeapFile. Implementation note: you
+     * will need to
+     * generate this tableid somewhere to ensure that each HeapFile has a "unique
+     * id," and that you
+     * always return the same value for a particular HeapFile. We suggest hashing
+     * the absolute file
+     * name of the file underlying the heapfile, i.e.
+     * f.getAbsoluteFile().hashCode().
      * 
      * @return an ID uniquely identifying this HeapFile.
      */
@@ -116,21 +124,29 @@ public class HeapFile implements DbFile {
         int numPages = numPages();
         BufferPool bufferPool = Database.getBufferPool();
         for (int i = 0; i < numPages; i++) {
-            page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableId, i),
-                    Permissions.READ_WRITE);
+            PageId pageId = new HeapPageId(tableId, i);
+            page = (HeapPage) bufferPool.getPage(tid, pageId, Permissions.READ_WRITE);
             if (page.getNumEmptySlots() > 0) {
                 page.insertTuple(t);
                 results.add(page);
                 break;
             }
+            bufferPool.releaseExclusive(tid, pageId);
         }
         if (results.isEmpty()) {
-            writePage(new HeapPage(new HeapPageId(tableId, numPages),
-                    HeapPage.createEmptyPageData()));
-            page = (HeapPage) bufferPool.getPage(tid, new HeapPageId(tableId, numPages),
-                    Permissions.READ_WRITE);
-            page.insertTuple(t);
-            results.add(page);
+            HeapPageId heapPageId = new HeapPageId(tableId, numPages);
+            synchronized (writePageLock) {
+                if (numPages() <= numPages)
+                    writePage(new HeapPage(heapPageId, HeapPage.createEmptyPageData()));
+            }
+            page = (HeapPage) bufferPool.getPage(tid, heapPageId, Permissions.READ_WRITE);
+            if (page.getNumEmptySlots() > 0) {
+                page.insertTuple(t);
+                results.add(page);
+            } else {
+                bufferPool.releaseExclusive(tid, heapPageId);
+                return insertTuple(tid, t);
+            }
         }
         return results;
     }
@@ -217,4 +233,3 @@ public class HeapFile implements DbFile {
     }
 
 }
-

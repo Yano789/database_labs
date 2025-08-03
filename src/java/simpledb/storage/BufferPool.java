@@ -9,7 +9,11 @@ import simpledb.transaction.TransactionId;
 
 import java.io.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.Map;
+import java.util.Set;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Iterator;
 
@@ -18,6 +22,7 @@ import java.util.Iterator;
  * disk. Access methods call into it to retrieve pages, and it fetches
  * pages from the appropriate location.
  * <p>
+ * The BufferPool is also responsible for locking; when a transaction fetches
  * The BufferPool is also responsible for locking; when a transaction fetches
  * a page, BufferPool checks that the transaction has the appropriate
  * locks to read/write the page.
@@ -40,6 +45,12 @@ public class BufferPool {
      * other classes. BufferPool should use the numPages argument to the
      * constructor instead.
      */
+
+    /**
+     * Default number of pages passed to the constructor. This is used by
+     * other classes. BufferPool should use the numPages argument to the
+     * constructor instead.
+     */
     public static final int DEFAULT_PAGES = 50;
 
     /**
@@ -51,17 +62,22 @@ public class BufferPool {
         this.numPages = numPages;
     }
 
+
     public static int getPageSize() {
         return pageSize;
     }
 
+
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void setPageSize(int pageSize) {
         BufferPool.pageSize = pageSize;
+        BufferPool.pageSize = pageSize;
     }
+
 
     // THIS FUNCTION SHOULD ONLY BE USED FOR TESTING!!
     public static void resetPageSize() {
+        BufferPool.pageSize = DEFAULT_PAGE_SIZE;
         BufferPool.pageSize = DEFAULT_PAGE_SIZE;
     }
 
@@ -73,35 +89,95 @@ public class BufferPool {
      * The retrieved page should be looked up in the buffer pool. If it
      * is present, it should be returned. If it is not present, it should
      * be added to the buffer pool and returned. If there is insufficient
+     * The retrieved page should be looked up in the buffer pool. If it
+     * is present, it should be returned. If it is not present, it should
+     * be added to the buffer pool and returned. If there is insufficient
      * space in the buffer pool, a page should be evicted and the new page
      * should be added in its place.
      *
+     * @param tid  the ID of the transaction requesting the page
+     * @param pid  the ID of the requested page
      * @param tid  the ID of the transaction requesting the page
      * @param pid  the ID of the requested page
      * @param perm the requested permissions on the page
      */
     public Page getPage(TransactionId tid, PageId pid, Permissions perm)
             throws TransactionAbortedException, DbException {
-
         // Acquire lock before accessing the page
-        lockManager.acquireLock(tid, pid, perm);
+        // lockManager.acquireLock(tid, pid, perm);
 
         // Check if page is already in cache
-        if (pageCache.containsKey(pid)) {
-            return pageCache.get(pid);
+        // if (pageCache.containsKey(pid)) {
+        // return pageCache.get(pid);
+        // }
+
+        // // If cache is full, evict a page
+        // if (pageCache.size() >= numPages) {
+        // evictPage();
+        // }
+
+        // // Read page from disk
+        // DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
+        // Page page = dbFile.readPage(pid);
+        // pageCache.put(pid, page);
+
+        // return page;
+        // yufeng: susceptible to race conditions
+
+        // Acquire lock
+        switch (perm) {
+            case READ_ONLY:
+                lockManager.acquireShared(tid, pid);
+                break;
+            case READ_WRITE:
+                lockManager.acquireExclusive(tid, pid);
+                break;
         }
 
-        // If cache is full, evict a page
-        if (pageCache.size() >= numPages) {
-            evictPage();
-        }
-
-        // Read page from disk
-        DbFile dbFile = Database.getCatalog().getDatabaseFile(pid.getTableId());
-        Page page = dbFile.readPage(pid);
-        pageCache.put(pid, page);
-
+        // Check cache
+        AtomicReference<DbException> dbException = new AtomicReference<>(null);
+        AtomicReference<IllegalArgumentException> illegalArgumentException = new AtomicReference<>(null);
+        Page page = pageCache.computeIfAbsent(pid, k -> {
+            if (pageCache.size() >= numPages) {
+                try {
+                    evictPage();
+                } catch (DbException e) {
+                    dbException.set(e);
+                    switch (perm) {
+                        case READ_ONLY:
+                            lockManager.releaseShared(tid, pid);
+                            break;
+                        case READ_WRITE:
+                            lockManager.releaseExclusive(tid, pid);
+                            break;
+                    }
+                    return null;
+                }
+            }
+            try {
+                return Database.getCatalog().getDatabaseFile(pid.getTableId()).readPage(pid);
+            } catch (IllegalArgumentException e) {
+                illegalArgumentException.set(e);
+                switch (perm) {
+                    case READ_ONLY:
+                        lockManager.releaseShared(tid, pid);
+                        break;
+                    case READ_WRITE:
+                        lockManager.releaseExclusive(tid, pid);
+                        break;
+                }
+                return null;
+            }
+        });
+        if (dbException.get() != null)
+            throw dbException.get();
+        if (illegalArgumentException.get() != null)
+            throw illegalArgumentException.get();
         return page;
+    }
+
+    public void releaseExclusive(TransactionId tid, PageId pid) {
+        lockManager.releaseExclusive(tid, pid);
     }
 
     /**
@@ -138,6 +214,7 @@ public class BufferPool {
      * the transaction.
      *
      * @param tid    the ID of the transaction requesting the unlock
+     * @param tid    the ID of the transaction requesting the unlock
      * @param commit a flag indicating whether we should commit or abort
      */
     public void transactionComplete(TransactionId tid, boolean commit) {
@@ -172,6 +249,9 @@ public class BufferPool {
      * Add a tuple to the specified table on behalf of transaction tid. Will
      * acquire a write lock on the page the tuple is added to and any other
      * pages that are updated (Lock acquisition is not needed for lab2).
+     * Add a tuple to the specified table on behalf of transaction tid. Will
+     * acquire a write lock on the page the tuple is added to and any other
+     * pages that are updated (Lock acquisition is not needed for lab2).
      * May block if the lock(s) cannot be acquired.
      * 
      * Marks any pages that were dirtied by the operation as dirty by calling
@@ -180,13 +260,16 @@ public class BufferPool {
      * that future requests see up-to-date pages.
      *
      * @param tid     the transaction adding the tuple
+     * @param tid     the transaction adding the tuple
      * @param tableId the table to add the tuple to
+     * @param t       the tuple to add
      * @param t       the tuple to add
      */
     public void insertTuple(TransactionId tid, int tableId, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         DbFile file = Database.getCatalog().getDatabaseFile(tableId);
         List<Page> dirtiedPages = file.insertTuple(tid, t);
+
 
         // Mark all dirtied pages as dirty and update cache
         for (Page page : dirtiedPages) {
@@ -207,12 +290,14 @@ public class BufferPool {
      *
      * @param tid the transaction deleting the tuple.
      * @param t   the tuple to delete
+     * @param t   the tuple to delete
      */
     public void deleteTuple(TransactionId tid, Tuple t)
             throws DbException, IOException, TransactionAbortedException {
         int tableId = t.getRecordId().getPageId().getTableId();
         DbFile file = Database.getCatalog().getDatabaseFile(tableId);
         List<Page> dirtiedPages = file.deleteTuple(tid, t);
+
 
         // Mark all dirtied pages as dirty and update cache
         for (Page page : dirtiedPages) {
